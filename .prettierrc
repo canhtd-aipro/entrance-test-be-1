@@ -1,0 +1,16 @@
+{
+  "singleQuote": false,
+  "trailingComma": "all",
+  "endOfLine": "auto",
+  "tabWidth": 2,
+  "printWidth": 120,
+  "objectWrap": "preserve",
+  "overrides": [
+    {
+      "files": "src/database/migrations/*.ts",
+      "options": {
+        "tabWidth": 4
+      }
+    }
+  ]
+}

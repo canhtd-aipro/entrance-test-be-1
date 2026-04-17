@@ -1,0 +1,21 @@
+
+/node_modules
+/dist
+.env
+.vscode
+.idea
+google-service-account.json
+
+# yarn
+.yarn
+.yarnrc.yml
+
+# data
+/data
+
+.requests
+.scripts
+json
+csv-output
+
+CLAUDE.md

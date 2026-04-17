@@ -1,0 +1,7 @@
+[*]
+indent_style = space
+indent_size = 2
+
+
+[src/database/migrations/*]
+indent_size = 4
