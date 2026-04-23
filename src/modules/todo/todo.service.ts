@@ -1,7 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { merge } from "lodash";
-import { FindManyOptions, ILike, Repository } from "typeorm";
+import { ILike, Repository } from "typeorm";
 import { CategoryEntity } from "../../database/entities/category.entity";
 import { TodoEntity } from "../../database/entities/todo.entity";
 import { DeleteBody } from "../../utils/dto/delete-body.dto";
@@ -22,23 +21,25 @@ export class TodoService {
 
   async list(query: ListTodosQuery) {
     const { keyword, take, skip } = query;
+    const whereCondition = keyword ? { name: ILike(toSearchString(keyword)) } : {};
 
-    const options: FindManyOptions<TodoEntity> = {
-      where: {},
-      relationLoadStrategy: "query",
-      relations: { categories: true },
-      order: { id: "DESC" },
-      take,
-      skip,
-    };
-
-    if (keyword) {
-      merge(options, { where: { name: ILike(toSearchString(keyword)) } });
-    }
-
-    const queryBuilder = this.todoRepo.createQueryBuilder("todo").setFindOptions(options);
-
-    const [todos, total] = await queryBuilder.getManyAndCount();
+    const [todos, total] = await Promise.all([
+      this.todoRepo
+        .createQueryBuilder("todo")
+        .leftJoin("todo.categories", "orderCategory")
+        .groupBy("todo.id")
+        .orderBy("COALESCE(SUM(orderCategory.priority), 0)", "DESC")
+        .addOrderBy("todo.id", "DESC")
+        .setFindOptions({
+          where: whereCondition,
+          relationLoadStrategy: "query",
+          relations: { categories: true },
+        })
+        .limit(take)
+        .offset(skip)
+        .getMany(),
+      this.todoRepo.count({ where: whereCondition }),
+    ]);
 
     return { todos, total };
   }
