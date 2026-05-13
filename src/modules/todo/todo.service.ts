@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { merge } from "lodash";
-import { FindManyOptions, ILike, Repository } from "typeorm";
+import { Between, FindManyOptions, ILike, Repository } from "typeorm";
 import { CategoryEntity } from "../../database/entities/category.entity";
 import { TodoEntity } from "../../database/entities/todo.entity";
 import { DeleteBody } from "../../utils/dto/delete-body.dto";
@@ -21,7 +21,7 @@ export class TodoService {
   ) {}
 
   async list(query: ListTodosQuery) {
-    const { keyword, take, skip } = query;
+    const { keyword, take, skip, deadlineFrom, deadlineTo, categoryIds, priorities } = query;
 
     const options: FindManyOptions<TodoEntity> = {
       where: {},
@@ -36,9 +36,50 @@ export class TodoService {
       merge(options, { where: { name: ILike(toSearchString(keyword)) } });
     }
 
+    if (deadlineFrom && deadlineTo) {
+      merge(options, { where: { deadline: Between(deadlineFrom, deadlineTo) } });
+    }
+
     const queryBuilder = this.todoRepo.createQueryBuilder("todo").setFindOptions(options);
 
+    // Filter: todos that include at least one of these categories
+    if (categoryIds && categoryIds.length > 0) {
+      queryBuilder.andWhere((qb) => {
+        const subQuery = qb
+          .subQuery()
+          .select("tc.todoId")
+          .from("todo_categories", "tc")
+          .where("tc.categoryId IN (:...categoryIds)")
+          .getQuery();
+        return `todo.id IN ${subQuery}`;
+      });
+      queryBuilder.setParameter("categoryIds", categoryIds);
+    }
+
+    // Filter: todos that ONLY include categories of these priorities
+    // (exclude todos that have any category with a priority NOT in the list)
+    if (priorities && priorities.length > 0) {
+      queryBuilder.andWhere((qb) => {
+        const subQuery = qb
+          .subQuery()
+          .select("tc2.todoId")
+          .from("todo_categories", "tc2")
+          .innerJoin("categories", "c2", "c2.id = tc2.categoryId")
+          .where("c2.priority NOT IN (:...priorities)")
+          .getQuery();
+        return `todo.id NOT IN ${subQuery}`;
+      });
+      queryBuilder.setParameter("priorities", priorities);
+    }
+
     const [todos, total] = await queryBuilder.getManyAndCount();
+
+    // Sort categories by priority ASC for each todo
+    for (const todo of todos) {
+      if (todo.categories) {
+        todo.categories.sort((a, b) => a.priority - b.priority);
+      }
+    }
 
     return { todos, total };
   }
